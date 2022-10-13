@@ -16,7 +16,10 @@ var app = (function () {
         ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
         ctx.stroke();
     };
-    
+
+    var PublicPointAtTopic = function (pt){
+        stompClient.send("/topic/newpoint", {}, JSON.stringify(pt));
+    }
     
     var getMousePosition = function (evt) {
         canvas = document.getElementById("canvas");
@@ -36,9 +39,8 @@ var app = (function () {
         //subscribe to /topic/TOPICXX when connections succeed
         stompClient.connect({}, function (frame) {
             console.log('Connected: ' + frame);
-            stompClient.subscribe('/topic/TOPICXX', function (eventbody) {
-                
-                
+            stompClient.subscribe('/topic/newpoint', function (eventbody) {
+                alert(eventbody)
             });
         });
 
@@ -59,7 +61,7 @@ var app = (function () {
             var pt=new Point(px,py);
             console.info("publishing point at "+pt);
             addPointToCanvas(pt);
-
+            PublicPointAtTopic(pt);
             //publicar el evento
         },
 
