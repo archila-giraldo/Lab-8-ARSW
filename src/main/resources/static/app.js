@@ -1,5 +1,8 @@
 var app = (function () {
 
+    /**
+     * Objeto punto con cordenadas x & y
+     */
     class Point{
         constructor(x,y){
             this.x=x;
@@ -7,16 +10,40 @@ var app = (function () {
         }
     }
 
-    let topic = "";
+    //No vimos necesario el uso del objeto polygon en javascript dado que no se utiliza en ningún momento, solo usamos una lista de puntos, y es redudnante crear una clase nueva para esto
 
+    /**
+     * Número del canvas que se está usando
+     * @type {string}
+     */
+    let numDrawing = "";
+
+    /**
+     * Estado de la conexión y de suscripciones a un cliente STOMP
+     * @type {boolean}
+     */
     let connected = false;
 
-    var setTopic = function (topicToConnect) {
-        topic = topicToConnect;
-    };
-
+    /**
+     * Cliente stomp
+     * @param drawing
+     */
     let stompClient = null;
 
+
+    let setDrawing = function (drawing) {
+        numDrawing = drawing;
+    };
+
+    function setConnected(status) {
+        connected = status;
+
+    }
+
+    /**
+     * Añade un punto al canvas
+     * @param point
+     */
     var addPointToCanvas = function (point) {
         var canvas = document.getElementById("canvas");
         var ctx = canvas.getContext("2d");
@@ -25,10 +52,49 @@ var app = (function () {
         ctx.stroke();
     };
 
-    var PublicPointAtTopic = function (pt){
-        stompClient.send(topic, {}, JSON.stringify(pt));
+    /**
+     * Añade un poligono al canvas
+     * @param points lista de puntos que componen el poligono
+     */
+    let addPolygonToCanvas = function (points){
+        let canvas = document.getElementById("canvas");
+        let ctx = canvas.getContext("2d");
+        let randomColor = Math.floor(Math.random()*16777215).toString(16);
+        ctx.fillStyle = "#"+randomColor;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x,points[0].y);
+        for(let i = 1;i < points.length;i++){
+            x = points[i].x;
+            y = points[i].y;
+            ctx.lineTo(x,y);
+        }
+        ctx.closePath();
+        ctx.fill();
+
     }
 
+    /**
+     * Publica un punto en un topico
+     * @param pt
+     * @constructor
+     */
+    var PublicPointAtTopic = function (pt){
+        stompClient.send("/topic/newpoint."+numDrawing, {}, JSON.stringify(pt));
+    }
+    /**
+     * Publica un punto a una app
+     * @param pt
+     * @constructor
+     */
+    var PublicPointAtApp = function (pt){
+        stompClient.send("/app/newpoint."+numDrawing, {}, JSON.stringify(pt));
+    }
+
+    /**
+     * Evento de click sobre un canvas
+     * @param evt evento de click
+     * @returns {{x: number, y: number}} punto correspondiente al click
+     */
     var getMousePosition = function (evt) {
         canvas = document.getElementById("canvas");
         var rect = canvas.getBoundingClientRect();
@@ -38,44 +104,51 @@ var app = (function () {
         };
     };
 
-
+    /**
+     * Conecta con un topico dependiendo del número del dibujo
+     */
     var connectAndSubscribe = function () {
         setConnected(true);
-        alert(topic);
+        alert("/topic/newpoint."+numDrawing);
         console.info('Connecting to WS...');
-        var socket = new SockJS('/stompendpoint');
+        let socket = new SockJS('/stompendpoint');
         stompClient = Stomp.over(socket);
         //subscribe to /topic/TOPICXX when connections succeed
         stompClient.connect({}, function (frame) {
             console.log('Connected: ' + frame);
-            stompClient.subscribe(topic, function (eventbody) {
-                alert(eventbody);
-                var pnt = JSON.parse(eventbody.body);
+            stompClient.subscribe("/topic/newpoint."+numDrawing, function (eventbody) {
+                let pnt = JSON.parse(eventbody.body);
                 addPointToCanvas(pnt);
+            });
+            stompClient.subscribe("/topic/newpolygon."+numDrawing,function (eventbody){
+                let pnts = JSON.parse(eventbody.body);
+                addPolygonToCanvas(pnts);
             });
         });
 
     };
 
+    /**
+     * Agrega un punto y lo publica en una posición determinada por el evento
+     * @param evt Evento de click sobre un canvas
+     */
     function clickOnCanvas(evt){
         let pt = getMousePosition(evt);
         addPointToCanvas(pt);
-        PublicPointAtTopic(pt);
+        PublicPointAtApp(pt);
     }
 
-
-    function setConnected(status) {
-        connected = status;
-
-    }
 
     return {
 
-        connect: function (socket) {
+        /**
+         * Función que conecta con un dibujo determinado
+         * @param drawing numero del dibujo con el que vamos a conectar
+         */
+        connect: function (drawing) {
             var can = document.getElementById("canvas");
             can.width = can.width;
-            var tempTopic = "/topic/newpoint." + socket;
-            setTopic(tempTopic);
+            setDrawing(drawing);
             //websocket connection
             if(connected){
                 this.disconnect();
@@ -86,6 +159,11 @@ var app = (function () {
             }
         },
 
+        /**
+         * Publica un punto en un topico y lo pinta
+         * @param px
+         * @param py
+         */
         publishPoint: function(px,py){
             var pt=new Point(px,py);
             console.info("publishing point at "+pt);
@@ -94,6 +172,9 @@ var app = (function () {
             //publicar el evento
         },
 
+        /**
+         * Desconectar del STOMP client
+         */
         disconnect: function () {
             if (stompClient !== null) {
                 let can = document.getElementById("canvas");
