@@ -4,14 +4,20 @@ var app = (function () {
         constructor(x,y){
             this.x=x;
             this.y=y;
-        }        
+        }
     }
 
-    var topic = 0;
+    let topic = "";
 
-    var stompClient = null;
+    let connected = false;
 
-    var addPointToCanvas = function (point) {        
+    var setTopic = function (topicToConnect) {
+        topic = topicToConnect;
+    };
+
+    let stompClient = null;
+
+    var addPointToCanvas = function (point) {
         var canvas = document.getElementById("canvas");
         var ctx = canvas.getContext("2d");
         ctx.beginPath();
@@ -22,7 +28,7 @@ var app = (function () {
     var PublicPointAtTopic = function (pt){
         stompClient.send(topic, {}, JSON.stringify(pt));
     }
-    
+
     var getMousePosition = function (evt) {
         canvas = document.getElementById("canvas");
         var rect = canvas.getBoundingClientRect();
@@ -34,10 +40,11 @@ var app = (function () {
 
 
     var connectAndSubscribe = function () {
+        setConnected(true);
+        alert(topic);
         console.info('Connecting to WS...');
         var socket = new SockJS('/stompendpoint');
         stompClient = Stomp.over(socket);
-        
         //subscribe to /topic/TOPICXX when connections succeed
         stompClient.connect({}, function (frame) {
             console.log('Connected: ' + frame);
@@ -49,23 +56,33 @@ var app = (function () {
         });
 
     };
-    
-    
+
+    function clickOnCanvas(evt){
+        let pt = getMousePosition(evt);
+        addPointToCanvas(pt);
+        PublicPointAtTopic(pt);
+    }
+
+
+    function setConnected(status) {
+        connected = status;
+
+    }
 
     return {
 
-        connect: function () {
+        connect: function (socket) {
             var can = document.getElementById("canvas");
-            topic = "/topic/newpoint." + id;
-            
+            can.width = can.width;
+            var tempTopic = "/topic/newpoint." + socket;
+            setTopic(tempTopic);
             //websocket connection
+            if(connected){
+                this.disconnect();
+            }
             connectAndSubscribe();
             if(window.PointerEvent){
-                can.addEventListener("pointerdown", function(evt){
-                    let pt = getMousePosition(evt);
-                    addPointToCanvas(pt);
-                    PublicPointAtTopic(pt);
-                })
+                can.addEventListener("pointerdown", clickOnCanvas);
             }
         },
 
@@ -79,6 +96,8 @@ var app = (function () {
 
         disconnect: function () {
             if (stompClient !== null) {
+                let can = document.getElementById("canvas");
+                can.removeEventListener("pointerdown",clickOnCanvas);
                 stompClient.disconnect();
             }
             setConnected(false);
